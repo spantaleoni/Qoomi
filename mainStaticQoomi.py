@@ -20,17 +20,50 @@ import matplotlib.colors as mcolors
 from sklearn.decomposition import PCA
 from sklearn.ensemble import IsolationForest
 from scipy.stats import ttest_ind
-
+from scipy.stats import zscore
+import numpy as np
 
 # List of allowed execution types
 allowed_execution_types = ['exec_listener', 'exec_listener_bridge', 'exec_sched', 'sub_process']
 G_SUBSET = 1000000
 G_TOPN_PROC = 15  # You can change this value to your desired number
+G_NODEthreshold = 2  # Define your threshold for anomaly detection
+G_EXECDthreshold = 5000
+# Define a log file path
+G_NODElog_file_path = 'NODEanomaly_log.txt'
+G_DEPLOYEDUNEXEC_file_path = 'HNKDeployedUnexecuted_Processes.csv'
+G_DEPLOYEDUNIQUE_file_path = 'HNKDeployedUniqueID_Processes.csv'
 
-# Load the CSV data
-data_path = "/home/simonlesflex/Boomi/Qoomi/EXERecords.csv"
+# Load the CSV data  HNK_ExecutionRecords_AtomID_829e5ce5-94b6-483a-b591-78ea97a33b91.csv
+#data_path = "/home/simonlesflex/Boomi/Qoomi/EXERecords.csv"
+data_path = "/home/simonlesflex/Boomi/Qoomi/HNK_ExecutionRecords_AtomID_829e5ce5-94b6-483a-b591-78ea97a33b91.csv"
+deployed_processes_path = "/home/simonlesflex/Boomi/Qoomi/HNK_DeployedProcesses_AtomID_829e5ce5-94b6-483a-b591-78ea97a33b91.csv"
+
 
 df = pd.read_csv(data_path, sep=',', index_col="executionId", error_bad_lines=False)
+
+# Load the deployed process data
+deployed_processesdf = pd.read_csv(deployed_processes_path)
+unique_deployed_process_ids = deployed_processesdf['processId'].unique()
+unique_executed_process_ids = df['processId'].unique()
+
+deployedDF_Unique = deployed_processesdf[deployed_processesdf['processId'].isin(unique_deployed_process_ids)]
+deployedDF_Unique.to_csv(G_DEPLOYEDUNIQUE_file_path)
+
+undeployed_unexecuted_processes = set(unique_deployed_process_ids) - set(unique_executed_process_ids)
+details_of_undeployed_unexecuted_processes = deployed_processesdf[deployed_processesdf['processId'].isin(undeployed_unexecuted_processes)]
+
+# Check if there are undeployed and unexecuted processes
+if not details_of_undeployed_unexecuted_processes.empty:
+    # Specify the filename for the CSV file
+    csv_filename = 'undeployed_unexecuted_processes.csv'
+
+    # Save the DataFrame to a CSV file
+    details_of_undeployed_unexecuted_processes.to_csv(G_DEPLOYEDUNEXEC_file_path, index=False)
+
+    print(f"Undeployed and unexecuted processes have been saved to {csv_filename}")
+else:
+    print("No undeployed and unexecuted processes found.")
 
 #df = df[-G_SUBSET:]
 
@@ -57,7 +90,7 @@ df = df.dropna(subset=['nodeId'])
 # Set 'executionTime' as the DataFrame index with DatetimeIndex
 df['executionTime'] = pd.to_datetime(df['executionTime'], format='%Y%m%d %H%M%S.%f', errors='coerce')
 df.index = df['executionTime']
-
+df['executionTime'] = df.index
 
 
 # Resample data to a specific time frequency (e.g., daily or hourly)
@@ -75,11 +108,23 @@ plt.title('Time Series Analysis of Execution Duration and Error Rate')
 plt.show()
 
 # Example: Create a histogram of execution durations
-plt.figure(figsize=(8, 6))
+'''plt.figure(figsize=(8, 6))
 sns.histplot(df['executionDuration'], bins=20, kde=True)
 plt.xlabel('Execution Duration')
 plt.ylabel('Frequency')
 plt.title('Distribution of Execution Durations')
+plt.show()'''
+# Example: Clean and visualize the distribution of execution durations
+plt.figure(figsize=(10, 6))
+# 1. Data Cleaning: Remove outliers (e.g., values greater than a threshold)
+cleaned_data = df[df['executionDuration'] <= G_EXECDthreshold]
+# 2. Log Transformation: Apply a log transformation to handle skewness
+log_data = np.log1p(cleaned_data['executionDuration'])
+# 3. Density Estimation (KDE): Use KDE to visualize the distribution
+sns.histplot(log_data, bins=20, kde=True, color='blue')
+plt.xlabel('Log(Execution Duration)')
+plt.ylabel('Density')
+plt.title('Distribution of Log(Execution Durations)')
 plt.show()
 
 #Dimensionality Reduction:
@@ -126,7 +171,7 @@ plt.show()
 
 
 # Convert 'executionTime' to a datetime format
-df['executionTime'] = pd.to_datetime(df['executionTime'], format='%Y%m%d %H%M%S.%f', errors='coerce')
+#df['executionTime'] = pd.to_datetime(df['executionTime'], format='%Y%m%d %H%M%S.%f', errors='coerce')
 
 # Create a time series plot of execution counts over time
 plt.figure(figsize=(12, 6))
@@ -310,23 +355,74 @@ correlation_matrix = filtered_df[numeric_cols].corr()
 # Create a heatmap of the correlation matrix
 plt.figure(figsize=(10, 6))
 sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
-plt.title('Correlation Matrix Heatmap')
+plt.title('Correlation Matrix FILTERED Heatmap')
 plt.show()
 
 
 
+'''3. Detecting Execution Time Anomalies:
+    Z-Score:
+
+Calculate the z-score for execution times on each node and identify data points with z-scores exceeding a certain threshold.'''
+# Group data by 'nodeIdtxt'
+grouped_by_node = df.groupby('nodeIdtxt')
 
 
+#for node, data in grouped_by_node:
+#    z_scores = zscore(data['executionDuration'])
+#    anomalies = data[abs(z_scores) > G_NODEthreshold]
+#    # Process anomalies or log them for further investigation
 
 
+'''IQR (Interquartile Range):
+
+Use the IQR method to detect anomalies by defining a range within which most data points fall.'''
+for node, data in grouped_by_node:
+    q1 = data['executionDuration'].quantile(0.25)
+    q3 = data['executionDuration'].quantile(0.75)
+    iqr = q3 - q1
+    lower_bound = q1 - 1.5 * iqr
+    upper_bound = q3 + 1.5 * iqr
+    anomalies = data[(data['executionDuration'] < lower_bound) | (data['executionDuration'] > upper_bound)]
+    # Process anomalies or log them for further investigation
+
+'''Machine Learning Models:
+
+Machine learning models isolation forests, one-class SVMs, or autoencoders to detect anomalies in execution times. 
+These models can capture complex patterns in the data.'''
+for node, data in grouped_by_node:
+    model = IsolationForest(contamination=0.05)  # Define your contamination parameter
+    model.fit(data[['executionDuration']])
+    anomalies = data[model.predict(data[['executionDuration']]) == -1]
+    # Process anomalies or log them for further investigation
 
 
+for node, data in grouped_by_node:
+    # Detect anomalies using the chosen method (e.g., z-score)
+    z_scores = zscore(data['executionDuration'])
+    anomalies = data[abs(z_scores) > G_NODEthreshold]
 
+    # Open the log file in append mode for each node's anomalies
+    with open(G_NODElog_file_path, 'a') as log_file:
+        # Add a heading for each node's anomalies
+        log_file.write(f"=== Anomalies Detected on Node {node} ===\n")
 
+        if not anomalies.empty:
+            # Calculate the top 5 processName IDs by anomalies count
+            top_process_names = anomalies['processName'].value_counts().head(5).index.tolist()
 
+            # Include processName in the statistics header
+            log_file.write(f"Total Anomalies: {len(anomalies)}\n")
+            log_file.write(f"Top 5 Process Names by Anomalies Count: {', '.join(top_process_names)}\n")
+            log_file.write(f"Average Execution Duration of Anomalies: {anomalies['executionDuration'].mean()} seconds\n")
+            log_file.write(f"Maximum Execution Duration of Anomalies: {anomalies['executionDuration'].max()} seconds\n")
+            log_file.write(f"Minimum Execution Duration of Anomalies: {anomalies['executionDuration'].min()} seconds\n")
 
-
-
+            # Log individual anomalies with processName
+            for index, row in anomalies.iterrows():
+                log_file.write(f"Anomaly detected - ProcessName: {row['processName']} - ExecutionTime: {row['executionTime']} - ExecutionDuration: {row['executionDuration']} seconds\n")
+        else:
+            log_file.write("No anomalies detected on this node.\n")
 
 
 
