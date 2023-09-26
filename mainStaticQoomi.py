@@ -19,25 +19,51 @@ import plotly.express as px
 import matplotlib.colors as mcolors
 from sklearn.decomposition import PCA
 from sklearn.ensemble import IsolationForest
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import silhouette_score
 from scipy.stats import ttest_ind
 from scipy.stats import zscore
 import numpy as np
 
 # List of allowed execution types
 allowed_execution_types = ['exec_listener', 'exec_listener_bridge', 'exec_sched', 'sub_process']
-G_SUBSET = 1000000
-G_TOPN_PROC = 15  # You can change this value to your desired number
+BASE_PATH = '/home/simonlesflex/Boomi/Qoomi/'
+BASE_PATHF = '/home/simonlesflex/Boomi/Qoomi/Fig/'
+G_SUBSET = 100000000
+G_TOPN_PROC = 30  # You can change this value to your desired number
+G_TOPN_PROCDUR = 30
 G_NODEthreshold = 2  # Define your threshold for anomaly detection
+G_KMEANS_Clusters = 8
 G_EXECDthreshold = 5000
+# Set the execution duration and error rate thresholds
+threshold_duration = 10000  # 10 seconds
+threshold_error_rate = 2    # 2%
+
+G_DISTRIBUTIONFlag = False
+G_SCATTERFlag = False
+G_SAVEFIG = True
 # Define a log file path
 G_NODElog_file_path = 'NODEanomaly_log.txt'
-G_DEPLOYEDUNEXEC_file_path = 'HNKDeployedUnexecuted_Processes.csv'
-G_DEPLOYEDUNIQUE_file_path = 'HNKDeployedUniqueID_Processes.csv'
+G_DEPLOYEDUNEXEC_file_path = 'HNKDeployedUnexecuted_Processes2.csv'
+G_DEPLOYEDUNIQUE_file_path = 'HNKDeployedUniqueID_Processes2.csv'
+G_AVGDURATIONFile = BASE_PATHF + 'AvgDuration.jpg'
+G_DISTRLOGDURATIONFile = BASE_PATHF + 'DistributionLogDuration.jpg'
+G_HIGHEXECDURATIONFile = BASE_PATHF + 'HighExecutionDuration.jpg'
+G_HIGHERRORRATEFile = BASE_PATHF + 'HighErrorRate.jpg'
+G_DAYEXECCOUNTFile = BASE_PATHF + 'DailyExecutionCountOverTime.jpg'
+G_TIMEBASEDALLFile = BASE_PATHF + 'TimeBasedDistributionAll.jpg'
+G_TIMEBASEDOUTFile = BASE_PATHF + 'TimeBasedDistributionOutliers.jpg'
+G_BOXDURATIONOUTFile = BASE_PATHF + 'BoxPlotDurationOutliers.jpg'
+G_BOXDURATIONALLFile = BASE_PATHF + 'BoxPlotDurationAll.jpg'
+G_KMEANSFile = BASE_PATHF + 'KMeansClustering.jpg'
+G_HEATFILTFile = BASE_PATHF + 'CorrelationHeatmapPCAFiltered.jpg'
+G_HEATALLFile = BASE_PATHF + 'CorrelationHeatmapALL.jpg'
+G_SCATTERALLFile = BASE_PATHF + 'ScatterALL.jpg'
 
 # Load the CSV data  HNK_ExecutionRecords_AtomID_829e5ce5-94b6-483a-b591-78ea97a33b91.csv
 #data_path = "/home/simonlesflex/Boomi/Qoomi/EXERecords.csv"
-data_path = "/home/simonlesflex/Boomi/Qoomi/HNK_ExecutionRecords_AtomID_829e5ce5-94b6-483a-b591-78ea97a33b91.csv"
-deployed_processes_path = "/home/simonlesflex/Boomi/Qoomi/HNK_DeployedProcesses_AtomID_829e5ce5-94b6-483a-b591-78ea97a33b91.csv"
+data_path = BASE_PATH + 'HNK_ExecutionRecords_AtomID_829e5ce5-94b6-483a-b591-78ea97a33b91.csv'
+deployed_processes_path = BASE_PATH + 'HNK_DeployedProcesses_AtomID_829e5ce5-94b6-483a-b591-78ea97a33b91.csv'
 
 
 df = pd.read_csv(data_path, sep=',', index_col="executionId", error_bad_lines=False)
@@ -88,9 +114,12 @@ df = df.dropna(subset=['executionTime'])
 df = df.dropna(subset=['nodeId'])
 
 # Set 'executionTime' as the DataFrame index with DatetimeIndex
+df['executionId'] = df.index
 df['executionTime'] = pd.to_datetime(df['executionTime'], format='%Y%m%d %H%M%S.%f', errors='coerce')
 df.index = df['executionTime']
 df['executionTime'] = df.index
+G_BeginDate = str(df.executionTime.min())[:10]
+G_EndDate = str(df.executionTime.max())[:10]
 
 
 # Resample data to a specific time frequency (e.g., daily or hourly)
@@ -98,14 +127,15 @@ daily_mean_duration = df['executionDuration'].resample('D').mean()
 daily_error_rate = (df['inboundErrorDocumentCount'] / df['inboundDocumentCount']).resample('D').mean()
 
 # Plot time series data
-plt.figure(figsize=(12, 6))
+fig = plt.figure(figsize=(24, 12))
 plt.plot(daily_mean_duration, label='Average Execution Duration')
 plt.plot(daily_error_rate, label='Error Rate')
 plt.xlabel('Date')
 plt.ylabel('Metric Value')
 plt.legend()
-plt.title('Time Series Analysis of Execution Duration and Error Rate')
+plt.title('Time Series Analysis of Execution Duration and Error Rate - ' + G_BeginDate + ' | ' + G_EndDate)
 plt.show()
+fig.savefig(G_AVGDURATIONFile)
 
 # Example: Create a histogram of execution durations
 '''plt.figure(figsize=(8, 6))
@@ -115,7 +145,7 @@ plt.ylabel('Frequency')
 plt.title('Distribution of Execution Durations')
 plt.show()'''
 # Example: Clean and visualize the distribution of execution durations
-plt.figure(figsize=(10, 6))
+fig = plt.figure(figsize=(20, 12))
 # 1. Data Cleaning: Remove outliers (e.g., values greater than a threshold)
 cleaned_data = df[df['executionDuration'] <= G_EXECDthreshold]
 # 2. Log Transformation: Apply a log transformation to handle skewness
@@ -124,8 +154,9 @@ log_data = np.log1p(cleaned_data['executionDuration'])
 sns.histplot(log_data, bins=20, kde=True, color='blue')
 plt.xlabel('Log(Execution Duration)')
 plt.ylabel('Density')
-plt.title('Distribution of Log(Execution Durations)')
+plt.title('Distribution of Log(Execution Durations) - ' + G_BeginDate + ' | ' + G_EndDate)
 plt.show()
+fig.savefig(G_DISTRLOGDURATIONFile)
 
 #Dimensionality Reduction:
 #If you have a large number of features, consider using dimensionality reduction techniques like Principal Component Analysis (PCA) 
@@ -135,9 +166,7 @@ reduced_features = pca.fit_transform(df[['inboundDocumentCount', 'outboundDocume
 
 
 
-# Set the execution duration and error rate thresholds
-threshold_duration = 10000  # 10 seconds
-threshold_error_rate = 5    # 5%
+
 
 # Calculate average execution duration by process
 average_duration_by_process = df.groupby('processName')['executionDuration'].mean()
@@ -150,44 +179,50 @@ processes_to_improve_duration = average_duration_by_process[average_duration_by_
 processes_to_improve_error_rate = error_rate_by_process[error_rate_by_process > threshold_error_rate]
 
 # Plotting average execution duration for processes with high durations
-plt.figure(figsize=(12, 6))
+sorted_df = processes_to_improve_duration.sort_values(ascending=False)
+processes_to_improve_duration = sorted_df[:G_TOPN_PROCDUR]
+
+fig = plt.figure(figsize=(24, 12))
 plt.bar(processes_to_improve_duration.index, processes_to_improve_duration.values)
 plt.xticks(rotation=90)
 plt.xlabel('Process Name')
 plt.ylabel('Average Execution Duration (ms)')
-plt.title('Processes with High Execution Durations')
+plt.title('Processes with High Execution Durations - ' + G_BeginDate + ' | ' + G_EndDate)
 plt.tight_layout()
 plt.show()
+fig.savefig(G_HIGHEXECDURATIONFile)
 
 # Plotting error rates for processes with high error rates
-plt.figure(figsize=(12, 6))
+fig = plt.figure(figsize=(24, 12))
 plt.bar(processes_to_improve_error_rate.index, processes_to_improve_error_rate.values)
 plt.xticks(rotation=90)
 plt.xlabel('Process Name')
 plt.ylabel('Error Rate (%)')
-plt.title('Processes with High Error Rates')
+plt.title('Processes with High Error Rates - ' + G_BeginDate + ' | ' + G_EndDate)
 plt.tight_layout()
 plt.show()
+fig.savefig(G_HIGHERRORRATEFile)
 
 
 # Convert 'executionTime' to a datetime format
 #df['executionTime'] = pd.to_datetime(df['executionTime'], format='%Y%m%d %H%M%S.%f', errors='coerce')
 
 # Create a time series plot of execution counts over time
-plt.figure(figsize=(12, 6))
+fig = plt.figure(figsize=(24, 12))
 df.set_index('executionTime').resample('D').size().plot()
 plt.xlabel('Date')
 plt.ylabel('Execution Count')
-plt.title('Daily Execution Count Over Time')
+plt.title('Daily Execution Count Over Time - ' + G_BeginDate + ' | ' + G_EndDate)
 plt.show()
-
+fig.savefig(G_DAYEXECCOUNTFile)
 
 
 # Replace 'N/A' with 0 (or any other appropriate value)
 #df['executionTime'] = df['executionTime'].replace('N/A', 0)
 
 # Fit an Isolation Forest model to identify outliers in execution duration
-clf = IsolationForest(contamination=0.05)
+#clf = IsolationForest(contamination=0.05)
+clf = IsolationForest(contamination=0.10)
 df['is_outlier'] = clf.fit_predict(df[['executionDuration']])
 
 # Create a custom colormap for binary values (outlier or not)
@@ -204,20 +239,27 @@ cmap = mcolors.ListedColormap(['blue', 'red'])
 df['is_outliertxt'] = df['is_outlier'].replace(replace_dict)
 unique_valuestxt = df['is_outliertxt'].unique()
 print(unique_valuestxt)
-df['nodeIdtxt'] = df['nodeId'].str[:6]
+contains_numbers = df['nodeId'][-1][:3].isnumeric()
+print(contains_numbers)  # True
+if contains_numbers is True:
+    df['nodeIdtxt'] = df['nodeId'].str[:13]
+else:
+    df['nodeIdtxt'] = df['nodeId'].str[:6]
 df = df.dropna(subset=['nodeIdtxt'])
 nodeIdtxt = df['nodeIdtxt'].unique()
 print(nodeIdtxt)
 
 # Visualize outliers using the custom colormap
-plt.figure(figsize=(30, 20))
-plt.scatter(df['nodeIdtxt'], df['executionDuration'], c=df['is_outliertxt'], cmap=cmap)
-# Add a colorbar to the plot
-plt.colorbar(label='Outlier Status', format='%d')
-plt.xlabel('nodeId')
-plt.ylabel('Execution Duration')
-plt.title('Outlier Detection in Execution Duration')
-plt.show()
+if G_SCATTERFlag is True:
+    fig = plt.figure(figsize=(24, 16))
+    plt.scatter(df['nodeIdtxt'], df['executionDuration'], c=df['is_outliertxt'], cmap=cmap)
+    # Add a colorbar to the plot
+    plt.colorbar(label='Outlier Status', format='%d')
+    plt.xlabel('nodeId')
+    plt.ylabel('Execution Duration')
+    plt.title('Outlier Detection in Execution Duration - ' + G_BeginDate + ' | ' + G_EndDate)
+    plt.show()
+    fig.savefig(G_SCATTERALLFile)
 
 
 
@@ -242,33 +284,67 @@ print(outlier_grouped)
 
 
 '''Time-based Analysis:
+ALL DATA'''
+# Group outliers by hour of the day
+df['hour_of_day'] = df.index.hour
+df_hourly_mean = df.groupby('hour_of_day')['executionDuration'].mean()
 
+# Plot the hourly mean execution duration of outliers
+fig = plt.figure(figsize=(20, 12))
+plt.plot(df_hourly_mean)
+plt.xlabel('Hour of Day')
+plt.ylabel('Mean Execution Duration')
+plt.title('Time-based Analysis of ALL Executions - ' + G_BeginDate + ' | ' + G_EndDate)
+plt.xticks(range(24))
+plt.grid(True)
+plt.show()
+fig.savefig(G_TIMEBASEDALLFile)
+    
+'''Time-based Analysis:
 Since you have timestamps in 'executionTime', you can analyze when these outliers occur:'''
 # Group outliers by hour of the day
 outlier_df['hour_of_day'] = outlier_df.index.hour
 outlier_hourly_mean = outlier_df.groupby('hour_of_day')['executionDuration'].mean()
 
 # Plot the hourly mean execution duration of outliers
-plt.figure(figsize=(10, 6))
+fig = plt.figure(figsize=(20, 12))
 plt.plot(outlier_hourly_mean)
 plt.xlabel('Hour of Day')
 plt.ylabel('Mean Execution Duration of Outliers')
-plt.title('Time-based Analysis of Outliers')
+plt.title('Time-based Analysis of Outliers - ' + G_BeginDate + ' | ' + G_EndDate)
 plt.xticks(range(24))
 plt.grid(True)
 plt.show()
+fig.savefig(G_TIMEBASEDOUTFile)
 
 
 '''Box Plots and Visualizations:
 Create a box plot to compare the distribution of execution durations for outliers across different processes:'''
+# Sort the DataFrame by 'executionDuration' in descending order and select the top 10 rows
+top_outliers = outlier_df.sort_values(by='executionDuration', ascending=False).head(G_TOPN_PROCDUR*50)
+top_all = df.sort_values(by='executionDuration', ascending=False).head(G_TOPN_PROCDUR*50)
+
 # Box plot of execution duration by process name
-plt.figure(figsize=(12, 6))
-sns.boxplot(x='processName', y='executionDuration', data=outlier_df)
+fig = plt.figure(figsize=(24, 12))
+sns.boxplot(x='processName', y='executionDuration', data=top_all)
 plt.xlabel('Process Name')
 plt.ylabel('Execution Duration')
-plt.title('Box Plot of Execution Duration for Outliers by Process')
+plt.title('Box Plot of Execution Duration for ALL by Process - ' + G_BeginDate + ' | ' + G_EndDate)
 plt.xticks(rotation=90)
 plt.show()
+fig.savefig(G_BOXDURATIONALLFile)
+
+
+
+# Box plot of execution duration by process name
+fig = plt.figure(figsize=(24, 12))
+sns.boxplot(x='processName', y='executionDuration', data=top_outliers)
+plt.xlabel('Process Name')
+plt.ylabel('Execution Duration')
+plt.title('Box Plot of Execution Duration for Outliers by Process - ' + G_BeginDate + ' | ' + G_EndDate)
+plt.xticks(rotation=90)
+plt.show()
+fig.savefig(G_BOXDURATIONOUTFile)
 
 
 #Perform the t-test:
@@ -320,14 +396,16 @@ filtered_df = df[df['processName'].isin(top_processes)]
 #Create Histograms for Categorical Data:
 categorical_cols = ['status', 'executionType', 'processName']
 
-for col in categorical_cols:
-    plt.figure(figsize=(10, 6))
-    ax = filtered_df[col].value_counts().plot(kind='bar')
-    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, horizontalalignment='right')
-    plt.xlabel(col)
-    plt.ylabel('Count')
-    plt.title(f'Distribution of {col}')
-    plt.show()
+if G_DISTRIBUTIONFlag is True:
+    for col in categorical_cols:
+        plt.figure(figsize=(10, 6))
+        ax = filtered_df[col].value_counts().plot(kind='bar')
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=45, horizontalalignment='right')
+        plt.xlabel(col)
+        plt.ylabel('Count')
+        plt.title(f'Distribution of {col}')
+        plt.show()
+
 
 
 '''Pairwise Scatter Plots:
@@ -337,27 +415,110 @@ correlation matrices to visualize relationships between variables.'''
 #numeric_cols = ['inboundDocumentCount', 'inboundErrorDocumentCount', 'outboundDocumentCount', 'executionDuration']
 numeric_cols = ['inboundErrorDocumentCount', 'outboundDocumentCount', 'executionDuration']
 
+
+'''K-MEANS CLUSTER: first need to preprocess the data and select the relevant columns for clustering. 
+in this case, it's essential to choose numeric columns as k-means operates on numerical data. 
+Here's the steps:
+
+    Select the numeric columns from your DataFrame.
+    Standardize the data (optional but recommended for k-means).
+    Choose the number of clusters (k) based on your problem.
+    Apply k-means clustering to the standardized data.
+    Assign cluster labels to your DataFrame. '''
+
+# Select numeric columns for clustering
+knumeric_cols = ['inboundDocumentCount', 'outboundDocumentCount', 'executionDuration', 'inboundDocumentSize', 'outboundDocumentSize']
+
+# Create a new DataFrame containing only the selected columns
+knumeric_df = df[knumeric_cols]
+# Standardize the data (recommended for k-means)
+scaler = StandardScaler()
+scaled_data = scaler.fit_transform(knumeric_df)
+# Choose the number of clusters (you need to specify 'k')
+k = G_KMEANS_Clusters  # You can change this value based on your problem
+# Apply k-means clustering
+kmeans = KMeans(n_clusters=k, random_state=42)
+cluster_labels = kmeans.fit_predict(scaled_data)
+# Assign cluster labels to the original DataFrame
+df['cluster'] = cluster_labels
+# Choose two numeric columns for visualization (e.g., 'inboundDocumentCount' and 'executionDuration')
+#x_feature = 'outboundDocumentCount'
+x_feature = 'inboundDocumentSize'
+y_feature = 'executionDuration'
+
+# Create a scatter plot with color-coded clusters
+fig = plt.figure(figsize=(30, 18))
+for cluster_num in df['cluster'].unique():
+    cluster_data = df[df['cluster'] == cluster_num]
+    plt.scatter(cluster_data[x_feature], cluster_data[y_feature], label=f'Cluster {cluster_num}')
+
+plt.xlabel(x_feature)
+plt.ylabel(y_feature)
+plt.title('K-Means Clustering Results')
+plt.legend()
+plt.show()
+fig.savefig(G_KMEANSFile)
+
+# Perform k-means clustering with different numbers of clusters (k)
+cluster_range = range(2, 11)
+cluster_scores = []
+
+for k in cluster_range:
+    kmeans = KMeans(n_clusters=k, random_state=0)
+    cluster_labels = kmeans.fit_predict(scaled_data)
+    silhouette_avg = silhouette_score(scaled_data, cluster_labels)
+    cluster_scores.append(silhouette_avg)
+
+# Plot the silhouette scores for different values of k
+plt.figure(figsize=(10, 5))
+plt.plot(cluster_range, cluster_scores, marker='o', linestyle='-', color='b')
+plt.xlabel('Number of Clusters (k)')
+plt.ylabel('Silhouette Score')
+plt.title('Silhouette Score for Different Numbers of Clusters')
+plt.grid(True)
+plt.show()
+
+# Based on the silhouette scores, let's say we choose k=2 clusters as it has a high score
+
+# Perform k-means clustering with k=2
+
+# Analyze the clusters
+cluster_centers = pd.DataFrame(scaler.inverse_transform(kmeans.cluster_centers_), columns=df.columns[:-1])
+df['Cluster'].value_counts()
+
+# Decide which cluster to analyze further
+# Let's say we decide to analyze the cluster with the higher execution duration and document counts
+cluster_to_analyze = df.groupby('Cluster')[['executionDuration', 'inboundDocumentCount', 'outboundDocumentCount']].mean()
+cluster_to_analyze = cluster_to_analyze.idxmax(axis=0)
+
+# Filter the data for the chosen cluster
+cluster_data_to_analyze = df[df['Cluster'] == cluster_to_analyze['Cluster']]
+
+# Further analysis and actions can be applied to this cluster
+print("Cluster with Higher Execution Duration and Document Counts:")
+print(cluster_data_to_analyze)
+
 # Create a pair plot
 #sns.pairplot(filtered_df[numeric_cols])
 #plt.show()
 
 # Create a correlation matrix heatmap
-correlation_matrix = df[numeric_cols].corr()
+'''correlation_matrix = df[numeric_cols].corr()
 plt.figure(figsize=(10, 6))
 sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
 plt.title('Correlation Matrix Heatmap')
-plt.show()
+plt.show() '''
 
 
 # Calculate the correlation matrix
 correlation_matrix = filtered_df[numeric_cols].corr()
 
 # Create a heatmap of the correlation matrix
-plt.figure(figsize=(10, 6))
+fig = plt.figure(figsize=(20, 12))
 sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
-plt.title('Correlation Matrix FILTERED Heatmap')
+plt.title('Correlation Matrix FILTERED Heatmap - ' + G_BeginDate + ' | ' + G_EndDate)
 plt.show()
-
+fig.savefig(G_HEATFILTFile)
 
 
 '''3. Detecting Execution Time Anomalies:
@@ -460,7 +621,8 @@ corrdf = corrdf.drop(['executionTime'], axis=1)
 correlation_matrix = corrdf.corr()
 
 # Visualize the correlation matrix as a heatmap
-plt.figure(figsize=(10, 8))
+fig = plt.figure(figsize=(20, 16))
 sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm')
-plt.title('Correlation Heatmap')
+plt.title('Correlation Heatmap - ' + G_BeginDate + ' | ' + G_EndDate)
 plt.show()
+fig.savefig(G_HEATALLFile)
