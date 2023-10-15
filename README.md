@@ -1,53 +1,71 @@
-Sure, here's a README file that explains the code you provided:
+mainStaticQoomi.py
+Table of Contents
 
-# Boomi Runtime Data Analytics Dashboard
+    Introduction
+    Overview
+    Requirements
+    Usage
+    Features
+    Anomaly Detection
+    License
 
-This is a Streamlit application designed to provide operational insights about a Boomi runtime based on Java, executing data integration processes between applications.
+Introduction
 
-## Overview
+mainStaticQoomi.py is a Python script designed for the analysis and visualization of execution records and process data in Qoomi, an integration platform. This script provides insights into executed processes, identifies outliers, and performs various data analysis tasks.
+Overview
 
-The code creates a Streamlit app that analyzes and visualizes data from a CSV file containing information about the executions of data integration processes. It aggregates and presents key metrics and insights, and includes features like K-Means clustering and interactive visualizations.
+    Author: Simon Lesflex
+    Last Updated: September 9, 2023
+    License: MIT
 
-## Code Structure
+The script uses various Python libraries, such as Pandas, Scikit-learn, Seaborn, and Matplotlib, to load, process, and analyze data.
+Requirements
 
-1. Import necessary libraries including Streamlit, pandas, scikit-learn, matplotlib, dateutil, seaborn, and plotly.express.
-2. Define the list of allowed execution types: 'exec_listener', 'exec_listener_bridge', 'exec_sched', 'sub_process'.
-3. Load the CSV data from the specified file path using pandas' `read_csv` function. The 'executionId' column is set as the index column.
-4. Convert the 'executionTime' column to a datetime format using the `pd.to_datetime` function and format string.
-5. Create a new column 'Process Category' based on the presence of 'parentExecutionId', categorizing executions as 'Main Process' or 'Child Process'.
-6. Aggregate the data by 'executionType' and calculate the mean of 'outboundDocumentCount', 'executionDuration', 'inboundDocumentSize', and 'outboundDocumentSize'.
-7. Filter the aggregated data based on the allowed execution types.
-8. Perform K-Means clustering on a subset of the data and add the 'cluster' column to the DataFrame.
-9. Build the Streamlit app UI:
-   - Display aggregated data in a subsection.
-   - Display K-Means clustering results in a subsection.
-   - Include interactive visualizations in the "Data Visualization" section:
-     - Sidebar for filtering options (process category).
-     - Interactive scatter plot of execution duration over time.
-     - Interactive scatter plot of outbound document count vs. execution duration.
-     - Interactive scatter plot of outbound document size vs. execution duration.
-   - Display bar plot of execution type vs. outbound document count.
-   - Display scatter plot of K-Means clusters based on execution duration and outbound document size.
+Before using this script, make sure you have the following:
 
-## How to Run
+    Python 3
+    Required Python libraries (you can install them using pip):
+        Streamlit
+        Pandas
+        Scikit-learn
+        Seaborn
+        Matplotlib
+        Plotly
+        NumPy
 
-1. Make sure you have Python and required libraries installed (Streamlit, pandas, scikit-learn, matplotlib, dateutil, seaborn, plotly.express).
-2. Save the code to a file named `app.py`.
-3. Open a terminal and navigate to the directory containing `app.py`.
-4. Run the Streamlit app using the command:
-   ```
-   streamlit run app.py
-   ```
-5. A browser window should open displaying the interactive dashboard.
+Usage
 
-## Usage
+You can run the script from the command line by providing two CSV file paths as arguments. These CSV files contain data related to executed processes. Here's how to run the script:
 
-- The dashboard provides insights into execution data and allows you to filter by process category.
-- Interactive visualizations help you explore execution duration, document count, and document size.
-- K-Means clustering results and bar plots offer further insights.
+bash
 
-Feel free to customize the dashboard and add more features as needed!
+python mainStaticQoomi.py filename1.csv filename2.csv
 
----
+If you don't provide arguments, the script will use default filenames for data files.
+Features
 
-Please note that this is a basic README example. You can modify and expand it based on your project's specific requirements and any additional information you want to provide to users.
+    Data Analysis: The script loads and analyzes execution records and process data from Qoomi.
+    Time Series Analysis: It provides insights into execution duration and error rates over time.
+    Data Visualization: The script generates visualizations, such as time series plots, histograms, box plots, and scatter plots.
+    Outlier Detection: It identifies outliers in execution duration and provides methods for handling them.
+    K-Means Clustering: The script performs K-Means clustering on execution data and provides cluster visualization.
+    Correlation Analysis: It analyzes the correlation between different numeric features.
+    Anomaly Detection: The script uses Z-Scores, IQR, and machine learning models to detect execution time anomalies.
+    Customization: You can adjust various parameters and thresholds for your specific needs.
+
+Anomaly Detection
+
+The script provides multiple methods for detecting execution time anomalies:
+
+    Z-Score: Calculates z-scores and identifies data points with scores exceeding a specified threshold.
+    IQR (Interquartile Range): Uses the IQR method to define a range for identifying anomalies.
+    Machine Learning Models: Utilizes isolation forests, one-class SVMs, or autoencoders for anomaly detection.
+
+The detected anomalies are logged for further investigation.
+License
+
+This script is licensed under the MIT License. You are free to use and modify it for your specific needs. If you find it useful, please consider contributing to the open-source community and sharing your improvements.
+
+Happy data analysis and anomaly detection with Qoomi!
+
+For questions or contributions, feel free to reach out to the author, Simon Lesflex.
