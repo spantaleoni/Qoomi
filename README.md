@@ -1,7 +1,7 @@
 mainStaticQoomi.py
 
 
-Table of Contents
+**Table of Contents** 
 
     Introduction
     Overview
