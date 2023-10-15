@@ -61,8 +61,9 @@ If you don't provide arguments, the script will use default filenames for data f
     Customization: You can adjust various parameters and thresholds for your specific needs.
 
 
-**Anomaly Detection
-**The script provides multiple methods for detecting execution time anomalies:
+**Anomaly Detection**
+
+The script provides multiple methods for detecting execution time anomalies:
 
     Z-Score: Calculates z-scores and identifies data points with scores exceeding a specified threshold.
     IQR (Interquartile Range): Uses the IQR method to define a range for identifying anomalies.
