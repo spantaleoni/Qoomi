@@ -40,10 +40,10 @@ Usage
 You can run the script from the command line by providing two CSV file paths as arguments. These CSV files contain data related to executed processes. Here's how to run the script:
 
 bash
-
 python mainStaticQoomi.py filename1.csv filename2.csv
 
 If you don't provide arguments, the script will use default filenames for data files.
+
 Features
 
     Data Analysis: The script loads and analyzes execution records and process data from Qoomi.
@@ -55,8 +55,8 @@ Features
     Anomaly Detection: The script uses Z-Scores, IQR, and machine learning models to detect execution time anomalies.
     Customization: You can adjust various parameters and thresholds for your specific needs.
 
-Anomaly Detection
 
+Anomaly Detection
 The script provides multiple methods for detecting execution time anomalies:
 
     Z-Score: Calculates z-scores and identifies data points with scores exceeding a specified threshold.
@@ -64,10 +64,9 @@ The script provides multiple methods for detecting execution time anomalies:
     Machine Learning Models: Utilizes isolation forests, one-class SVMs, or autoencoders for anomaly detection.
 
 The detected anomalies are logged for further investigation.
+
+
 License
-
 This script is licensed under the MIT License. You are free to use and modify it for your specific needs. If you find it useful, please consider contributing to the open-source community and sharing your improvements.
-
 Happy data analysis and anomaly detection with Qoomi!
-
 For questions or contributions, feel free to reach out to the author, Simon Lesflex.
