@@ -24,6 +24,7 @@ from sklearn.metrics import silhouette_score
 from scipy.stats import ttest_ind
 from scipy.stats import zscore
 import numpy as np
+import sys
 
 # List of allowed execution types
 allowed_execution_types = ['exec_listener', 'exec_listener_bridge', 'exec_sched', 'sub_process']
@@ -33,7 +34,7 @@ G_SUBSET = 100000000
 G_TOPN_PROC = 30  # You can change this value to your desired number
 G_TOPN_PROCDUR = 30
 G_NODEthreshold = 2  # Define your threshold for anomaly detection
-G_KMEANS_Clusters = 8
+G_KMEANS_Clusters = 3
 G_EXECDthreshold = 5000
 # Set the execution duration and error rate thresholds
 threshold_duration = 10000  # 10 seconds
@@ -42,6 +43,7 @@ threshold_error_rate = 2    # 2%
 G_DISTRIBUTIONFlag = False
 G_SCATTERFlag = False
 G_SAVEFIG = True
+G_CLUSTERRANGE_Flag = False
 # Define a log file path
 G_NODElog_file_path = 'NODEanomaly_log.txt'
 G_DEPLOYEDUNEXEC_file_path = 'HNKDeployedUnexecuted_Processes2.csv'
@@ -62,8 +64,24 @@ G_SCATTERALLFile = BASE_PATHF + 'ScatterALL.jpg'
 
 # Load the CSV data  HNK_ExecutionRecords_AtomID_829e5ce5-94b6-483a-b591-78ea97a33b91.csv
 #data_path = "/home/simonlesflex/Boomi/Qoomi/EXERecords.csv"
-data_path = BASE_PATH + 'HNK_ExecutionRecords_AtomID_829e5ce5-94b6-483a-b591-78ea97a33b91.csv'
-deployed_processes_path = BASE_PATH + 'HNK_DeployedProcesses_AtomID_829e5ce5-94b6-483a-b591-78ea97a33b91.csv'
+
+# Check if two filenames were provided as arguments
+if len(sys.argv) != 3 and len(sys.argv) != 1:
+    print("Usage: python your_script.py filename1.csv filename2.csv")
+    sys.exit(1)
+else:
+    if len(sys.argv) == 1:
+        filename1 = 'HNK_ExecutionRecords_AtomID_829e5ce5-94b6-483a-b591-78ea97a33b91.csv'
+        filename2 = 'HNK_DeployedProcesses_AtomID_829e5ce5-94b6-483a-b591-78ea97a33b91.csv'
+    else:
+        # Get the filenames from the command line arguments
+        filename1 = sys.argv[1]
+        filename2 = sys.argv[2]
+    
+
+
+data_path = BASE_PATH + filename1
+deployed_processes_path = BASE_PATH + filename2
 
 
 df = pd.read_csv(data_path, sep=',', index_col="executionId", error_bad_lines=False)
@@ -460,43 +478,54 @@ plt.show()
 fig.savefig(G_KMEANSFile)
 
 # Perform k-means clustering with different numbers of clusters (k)
-cluster_range = range(2, 11)
-cluster_scores = []
+if G_CLUSTERRANGE_Flag is True:
+    #cluster_range = range(2, 11)
+    cluster_range = range((G_KMEANS_Clusters -1), G_KMEANS_Clusters)
+    #cluster_range = G_KMEANS_Clusters
+    cluster_scores = []
+    
+    for k in cluster_range:
+    #k = cluster_range
+        kmeans = KMeans(n_clusters=k, random_state=0)
+        cluster_labels = kmeans.fit_predict(scaled_data)
+        df['Cluster'] = cluster_labels
+        silhouette_avg = silhouette_score(scaled_data, cluster_labels)
+        cluster_scores.append(silhouette_avg)
+        
+    # Plot the silhouette scores for different values of k
+    plt.figure(figsize=(10, 5))
+    plt.plot(cluster_range, cluster_scores, marker='o', linestyle='-', color='b')
+    plt.xlabel('Number of Clusters (k)')
+    plt.ylabel('Silhouette Score')
+    plt.title('Silhouette Score for Different Numbers of Clusters')
+    plt.grid(True)
+    plt.show()
+    
+    # Based on the silhouette scores, let's say we choose k=2 clusters as it has a high score
 
-for k in cluster_range:
-    kmeans = KMeans(n_clusters=k, random_state=0)
-    cluster_labels = kmeans.fit_predict(scaled_data)
-    silhouette_avg = silhouette_score(scaled_data, cluster_labels)
-    cluster_scores.append(silhouette_avg)
+    # Perform k-means clustering with k=2
 
-# Plot the silhouette scores for different values of k
-plt.figure(figsize=(10, 5))
-plt.plot(cluster_range, cluster_scores, marker='o', linestyle='-', color='b')
-plt.xlabel('Number of Clusters (k)')
-plt.ylabel('Silhouette Score')
-plt.title('Silhouette Score for Different Numbers of Clusters')
-plt.grid(True)
-plt.show()
+    # Analyze the clusters
+    #cluster_centers = pd.DataFrame(scaler.inverse_transform(kmeans.cluster_centers_), columns=df.columns[:-1])
+    cluster_centers = pd.DataFrame(scaler.inverse_transform(kmeans.cluster_centers_), columns=knumeric_cols)
+    df['Cluster'].value_counts()
 
-# Based on the silhouette scores, let's say we choose k=2 clusters as it has a high score
+    # Decide which cluster to analyze further
+    # Let's say we decide to analyze the cluster with the higher execution duration and document counts
+    cluster_to_analyze = df.groupby('Cluster')[['executionDuration', 'inboundDocumentCount', 'outboundDocumentCount']].mean()
+    #cluster_to_analyze['Cluster'] = cluster_to_analyze.idxmax(axis=0)
+    cluster_to_analyze['Cluster'] = cluster_to_analyze.index
 
-# Perform k-means clustering with k=2
+    # Filter the data for the chosen cluster
+    cluster_data_to_analyze = df[df['Cluster'] == cluster_to_analyze['Cluster']]
+    #cluster_data_to_analyze = df[df['Cluster'] == cluster_to_analyze]
 
-# Analyze the clusters
-cluster_centers = pd.DataFrame(scaler.inverse_transform(kmeans.cluster_centers_), columns=df.columns[:-1])
-df['Cluster'].value_counts()
+    # Further analysis and actions can be applied to this cluster
+    print("Cluster with Higher Execution Duration and Document Counts:")
+    print(cluster_data_to_analyze)
 
-# Decide which cluster to analyze further
-# Let's say we decide to analyze the cluster with the higher execution duration and document counts
-cluster_to_analyze = df.groupby('Cluster')[['executionDuration', 'inboundDocumentCount', 'outboundDocumentCount']].mean()
-cluster_to_analyze = cluster_to_analyze.idxmax(axis=0)
 
-# Filter the data for the chosen cluster
-cluster_data_to_analyze = df[df['Cluster'] == cluster_to_analyze['Cluster']]
 
-# Further analysis and actions can be applied to this cluster
-print("Cluster with Higher Execution Duration and Document Counts:")
-print(cluster_data_to_analyze)
 
 # Create a pair plot
 #sns.pairplot(filtered_df[numeric_cols])
@@ -591,24 +620,6 @@ for node, data in grouped_by_node:
 
 
 df['executionId'] = df.index
-
-'''
-import networkx as nx
-
-# Create a directed graph of process dependencies
-G = nx.DiGraph()
-
-# Add edges based on parent and child relationships
-for _, row in df.iterrows():
-    if not pd.isnull(row['parentExecutionId']):
-        G.add_edge(row['parentExecutionId'], row['executionId'])
-
-# Visualize the process dependency graph
-plt.figure(figsize=(12, 8))
-pos = nx.spring_layout(G, seed=42)
-nx.draw(G, pos, with_labels=False, node_size=20)
-plt.title('Process Dependency Graph')
-plt.show()'''
 
 corrdf = df.drop(['atomName', 'inboundDocumentCount', 'originalExecutionId', 'account', 'status', 'executionType', 
                   'processId', 'atomId', 'message', 'parentExecutionId', 
