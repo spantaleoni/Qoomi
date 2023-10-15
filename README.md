@@ -61,7 +61,7 @@ If you don't provide arguments, the script will use default filenames for data f
     Customization: You can adjust various parameters and thresholds for your specific needs.
 
 
-**Anomaly Detection**
+**Anomaly Detection**  
 
 The script provides multiple methods for detecting execution time anomalies:
 
